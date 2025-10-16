@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Mapa com Clusters e Popups</title>
+
+<link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster/dist/MarkerCluster.css" />
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster/dist/MarkerCluster.Default.css" />
+
+<style>
+  html, body { height: 100%; margin: 0; }
+  #map { height: 100vh; }
+
+  /* ===== Popup estilo card ===== */
+  .site-popup{
+    font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;
+    max-width:320px;background:#fff;border-radius:10px;box-shadow:0 2px 12px rgba(0,0,0,.2);
+    overflow:hidden;color:#444
+  }
+  .site-popup .content{padding:16px 18px 20px}
+  .site-popup h3{margin:0 0 10px;font-size:18px;font-weight:600;color:#f2781f}
+  .site-popup p{font-size:14px;line-height:1.5;margin:0 0 16px;color:#555}
+  .site-popup .btn-link{
+    display:inline-block;padding:10px 18px;background:#f2781f;color:#fff;
+    font-size:14px;font-weight:600;text-decoration:none;border-radius:22px;transition:background .2s ease
+  }
+  .site-popup .btn-link:hover{ background:#f2781f; }
+  .leaflet-popup-content-wrapper{border-radius:10px;padding:0}
+  .leaflet-popup-content{margin:0}
+  .leaflet-popup-tip{background:#fff}
+
+  /* ===== Pins (gota azul) ===== */
+  .pin-icon svg{filter:drop-shadow(0 1px 2px rgba(0,0,0,.35));display:block}
+
+  /* ===== Cluster “N Operations” ===== */
+  .marker-cluster{background:transparent;border:none; line-height:0; }
+  .cluster-anchor{position:relative;width:0;height:0}
+  .cluster-bubble{
+    position:absolute;left:0;top:0;transform:translate(-50%,calc(-100% - 12px));
+    display:inline-flex;align-items:center;justify-content:center;
+    min-width:100px;height:44px;padding:0 14px;
+    background:#f2781f; color:#fff; border:2px solid #fff; border-radius:14px;
+    box-shadow:0 2px 8px rgba(0,0,0,.25);
+    font:700 20px/1 system-ui,-apple-system, Segoe UI, Roboto, Arial, sans-serif;
+    letter-spacing:.2px;white-space:nowrap
+  }
+  .cluster-bubble::after{
+    content:"";position:absolute;left:50%;transform:translateX(-50%);
+    bottom:-10px;
+    border-left:9px solid transparent;border-right:9px solid transparent;
+    border-top:10px solid #f2781f;
+  }
+  .cluster-bubble::before{
+    content:"";position:absolute;left:50%;transform:translateX(-50%);
+    bottom:-13px;
+    border-left:11px solid transparent;border-right:11px solid transparent;
+    border-top:13px solid #fff;
+  }
+</style>
+</head>
+<body>
+<div id="map"></div>
+
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet.markercluster/dist/leaflet.markercluster.js"></script>
+
+<script>
+  /* ===== MAPA ===== */
+  const map = L.map('map', { preferCanvas: true }).setView([-6.1, -50.0], 3);
+
+  L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+    attribution: 'Tiles © Esri — Source: Esri, Maxar, Earthstar Geographics, and others', maxZoom: 18
+  }).addTo(map);
+  L.tileLayer('https://services.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}', {
+    attribution: 'Boundaries & Places © Esri', maxZoom: 18
+  }).addTo(map);
+
+  /* ===== PINS (Brasil + Novas localizações) ===== */
+  const projectLocations = [
+       // ----- EOLICOS (Elera) -----
+    { latlng: [-6.6926, -36.6615], title: 'Complexo Eólico Seridó', text: 'Complexo Eólico Seridó localizado nos municípios potiguares de Parelhas, Equador e Junco do Seridó; entrou em operação em 2024, é composto por 55 aerogeradores e tem capacidade instalada de 247,5 MW.', url: '#' },
+    { latlng: [-30.2662, -50.7825], title: 'Complexo Eólico Pontal', text: 'Complexo Eólico Pontal em Viamão (RS), com 25 aerogeradores e capacidade instalada de 59,9 MW.', url: '#' },
+    { latlng: [-3.33604, -39.26022], title: 'Complexo Eólico Faísa', text: 'Complexo Eólico Faísa situado em Trairi (CE), no litoral cearense; possui 65 aerogeradores e capacidade instalada de 136,5 MW.', url: '#' },
+    { latlng: [-14.07884, -42.64402], title: 'Complexo Eólico Alto Sertão I', text: 'Complexo Eólico Alto Sertão I é composto por 14 parques eólicos distribuídos nos municípios baianos de Caetité, Guanambi, Igaporã e Pindaí; foi adquirido em 2017 e possui capacidade instalada de 294 MW.', url: '#' },
+    { latlng: [-5.2949, -35.88578], title: 'Complexo Eólico Renascença', text: 'Complexo Eólico Renascença localizado no município potiguar de Parazinho; reúne cinco parques eólicos (Renascença I, II, III, IV e V) e possui 150 MW de capacidade instalada.', url: '#' },
+
+    // ----- SOLARES (Elera) -----
+    { latlng: [-5.24642, -37.98384], title: 'Complexo Solar Alex', text: 'Complexo Solar Alex localizado entre Limoeiro do Norte e Tabuleiro do Norte, no Ceará; reúne 14 parques solares com capacidade instalada de 278 MW.', url: '#' },
+    { latlng: [-15.94208, -43.51286], title: 'Complexo Solar Janaúba', text: 'Complexo Solar Janaúba, no norte de Minas Gerais, é o maior complexo solar do Hemisfério Sul; possui 1 617 MWp de capacidade instalada distribuída em 11 parques.', url: '#' },
+    { latlng: [-27.1190, -70.1715], title: 'Amanecer Solar CAP', text: 'Usina solar Amanecer Solar CAP, localizada em Copiapó, na região chilena do Atacama; possui capacidade de 100 MW.', url: '#' },
+
+    // ----- HIDRICOS (Elera) -----
+    { latlng: [-26.2278, -52.0319], title: 'Foz do Estrela', text: 'Central Hidrelétrica Foz do Estrela localizada em Coronel Domingos Soares (PR) com capacidade instalada de 29,5 MW (em operação desde 2022).', url: '#' },
+    { latlng: [-27.583, -48.983], title: 'Angelina', text: 'PCH Angelina localizada em Angelina (SC) com 26,27 MW de capacidade instalada, em funcionamento desde 2010.', url: '#' },
+    { latlng: [-21.45667, -43.55250], title: 'Anna Maria', text: 'PCH Anna Maria localizada em Santos Dumont (MG); adquirida em 2005, capacidade instalada de 1,68 MW.', url: '#' },
+    { latlng: [-20.44278, -53.75889], title: 'Assis Chateaubriand', text: 'PCH Assis Chateaubriand localizada em Ribas do Rio Pardo (MS); capacidade instalada de 29,5 MW, adquirida em 2016.', url: '#' },
+    { latlng: [-21.38695, -42.57995], title: 'Barra do Braúna', text: 'Usina Hidrelétrica Barra do Braúna localizada nos municípios mineiros de Cataguases e Laranjal; opera desde 2009 com capacidade instalada de 39 MW.', url: '#' },
+    { latlng: [-20.25806, -42.03361], title: 'Benjamin Baptista', text: 'PCH Benjamin Baptista em Manhuaçu (MG); adquirida em 2005, capacidade instalada de 9 MW.', url: '#' },
+    { latlng: [-28.71194, -51.93500], title: 'Caçador', text: 'PCH Caçador em Serafina Corrêa (RS); entrou em operação em 2008 com capacidade instalada de 22,5 MW.', url: '#' },
+    { latlng: [-20.25806, -42.03361], title: 'Cachoeira Alta', text: 'CGH Cachoeira Alta em Manhuaçu (MG); adquirida em 2007 com capacidade instalada de 0,3 MW.', url: '#' },
+    { latlng: [-28.983, -51.850], title: 'Cotiporã', text: 'PCH Cotiporã em Dois Lajeados (RS); iniciou operação em 2008 e tem 19,5 MW de capacidade instalada.', url: '#' },
+    { latlng: [-15.259865, -59.19790], title: 'Guaporé', text: 'Usina Hidrelétrica Guaporé localizada nos municípios mato‑grossenses de Pontes e Lacerda e Vale de São Domingos; capacidade instalada de 120 MW, adquirida em 2015.', url: '#' },
+    { latlng: [-21.45667, -43.55250], title: 'Guary', text: 'PCH Guary em Santos Dumont (MG); adquirida em 2005, capacidade instalada de 5,4 MW.', url: '#' },
+    { latlng: [-17.20889, -54.15000], title: 'Itiquira', text: 'Usina Hidrelétrica Itiquira, localizada em Itiquira (MT); maior usina hídrica da companhia com 157,37 MW de capacidade instalada, adicionada ao portfólio em 2008.', url: '#' },
+    { latlng: [-21.406159, -43.0059905], title: 'Ivan Botelho I', text: 'PCH Ivan Botelho I localizada nos distritos de Descoberto e Guarani (MG); adquirida em 2004 e com capacidade instalada de 24,3 MW.', url: '#' },
+    { latlng: [-21.35194, -43.04694], title: 'Ivan Botelho II', text: 'PCH Ivan Botelho II localizada no distrito de Guarani (MG); possui capacidade instalada de 12,4 MW e foi adicionada ao portfólio em 2005.', url: '#' },
+    { latlng: [-21.317, -42.867], title: 'Ivan Botelho III', text: 'PCH Ivan Botelho III localizada em Astolfo Dutra (MG); possui capacidade instalada de 24,4 MW e foi adquirida em 2005.', url: '#' },
+    { latlng: [-20.10222, -42.45333], title: 'João Camilo Penna', text: 'PCH João Camilo Penna em Raul Soares (MG); adquirida em 2005, capacidade instalada de 21,6 MW.', url: '#' },
+    { latlng: [-28.983, -51.850], title: 'Linha Emília', text: 'PCH Linha Emília localizada em Dois Lajeados (RS); iniciou operação em 2009 e possui capacidade instalada de 19,5 MW.', url: '#' },
+    { latlng: [-20.28389, -42.34083], title: 'Matipó', text: 'CGH Matipó no distrito de Matipó (MG); adquirida em 2007 com capacidade instalada de 0,42 MW.', url: '#' },
+    { latlng: [-21.19500, -42.61389], title: 'Miguel Pereira', text: 'CGH Miguel Pereira localizada em Miraí (MG); capacidade instalada de 0,74 MW, somada ao portfólio em 2007.', url: '#' },
+    { latlng: [-21.13056, -42.36639], title: 'Ormeo Junqueira Botelho', text: 'PCH Ormeo Junqueira Botelho localizada em Muriaé (MG); possui 22,7 MW de capacidade instalada e foi adquirida em 2005.', url: '#' },
+    { latlng: [-18.52722, -53.96167], title: 'Paraíso', text: 'PCH Paraíso em Costa Rica (MS); começou a operar em 2016 e tem capacidade instalada de 21,6 MW.', url: '#' },
+    { latlng: [-29.44444, -50.58056], title: 'Passo do Meio', text: 'PCH Passo do Meio em São Francisco de Paula (RS); opera desde 2003 com 30 MW de capacidade instalada.', url: '#' },
+    { latlng: [-24.8689, -51.6278], title: 'Pedrinho I', text: 'PCH Pedrinho I localizada em Boa Ventura de São Roque (PR); entrou em operação em 2003 e possui 16,2 MW de capacidade instalada.', url: '#' },
+    { latlng: [-28.78389, -50.39997], title: 'Pezzi', text: 'PCH Pezzi localizada nos municípios de Bom Jesus e Jaquirana (RS); entrou em operação em 2012 com capacidade instalada de 19 MW.', url: '#' },
+    { latlng: [-16.41639, -51.81583], title: 'Piranhas', text: 'PCH Piranhas localizada em Piranhas (GO); possui 18 MW de capacidade instalada e iniciou operação em 2006.', url: '#' },
+    { latlng: [-19.39500, -54.56583], title: 'Ponte Alta', text: 'PCH Ponte Alta em São Gabriel do Oeste (MS); entrou em operação em 2006 e tem capacidade instalada de 13 MW.', url: '#' },
+    { latlng: [-14.49611, -46.10611], title: 'Riachão', text: 'PCH Riachão localizada em Mambaí (GO); possui capacidade instalada de 13,40 MW e foi adquirida em 2007.', url: '#' },
+    { latlng: [-20.25806, -42.03361], title: 'Roça Grande', text: 'CGH Roça Grande localizada em Manhuaçu (MG); capacidade instalada de 0,77 MW, adquirida em 2007.', url: '#' },
+    { latlng: [-14.4758, -59.6089], title: 'Salto Corgão', text: 'Usina Salto Corgão em Nova Lacerda (MT); iniciou suas atividades em 2005 com capacidade de 27 MW.', url: '#' },
+    { latlng: [-15.4179, -58.7193], title: 'Salto Jauru', text: 'PCH Salto Jauru localizada nos municípios mato‑grossenses de Jauru e Indiavaí; entrou em operação em 2007 e possui 19 MW de capacidade instalada.', url: '#' },
+    { latlng: [-24.04583, -52.38278], title: 'Salto Natal', text: 'PCH Salto Natal localizada em Campo Mourão (PR); possui capacidade instalada de 15,12 MW.', url: '#' },
+    { latlng: [-21.19500, -42.61389], title: 'Santa Cecília', text: 'CGH Santa Cecília localizada em Miraí (MG); começou a operar em 2007 e possui capacidade instalada de 0,42 MW.', url: '#' },
+    { latlng: [-28.93167, -50.59343], title: 'Serra dos Cavalinhos I', text: 'PCH Serra dos Cavalinhos I localizada nos municípios de Bom Jesus, São Francisco de Paula e Monte Alegre dos Campos (RS); iniciou operações em 2017 e tem capacidade instalada de 25 MW.', url: '#' },
+    { latlng: [-28.68278, -50.78278], title: 'Serra dos Cavalinhos II', text: 'PCH Serra dos Cavalinhos II em Monte Alegre dos Campos (RS); opera desde 2016 e possui capacidade instalada de 29,03 MW.', url: '#' },
+    { latlng: [-20.30083, -42.47778], title: 'Túlio Cordeiro de Mello', text: 'PCH Túlio Cordeiro de Mello localizada em Abre Campo (MG); foi adquirida em 2004 e possui capacidade instalada de 15,8 MW.', url: '#' }
+  ];
+
+
+  /* ===== POPUP ===== */
+  function popupHTML({ title, text, url }) {
+    return `
+      <div class="site-popup">
+        <div class="content">
+          <h3>${title}</h3>
+          <p>${text}</p>
+          <a class="btn-link" href="${url}" target="_blank" rel="noopener">Find out more</a>
+        </div>
+      </div>`;
+  }
+
+  /* ===== ICON ===== */
+  function makePinIcon(fill = '#f2781f', stroke = '#FFFFFF') {
+    const w = 28, h = 38;
+    return L.divIcon({
+      className: 'pin-icon',
+      html: `<svg width="${w}" height="${h}" viewBox="0 0 24 32" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+               <path d="M12 1C6.48 1 2 5.48 2 11c0 6.05 7.15 14.05 9.2 16.21a1 1 0 0 0 1.6 0C14.85 25.05 22 17.05 22 11 22 5.48 17.52 1 12 1Z"
+                     fill="${fill}" stroke="${stroke}" stroke-width="2"/>
+             </svg>`,
+      iconSize: [w, h],
+      iconAnchor: [w/2, h-2],
+      popupAnchor: [0, -h + 8]
+    });
+  }
+  const pinIcon = makePinIcon('#f2781f', '#FFFFFF');
+
+  /* ===== CLUSTER ===== */
+  const markers = L.markerClusterGroup({
+    iconCreateFunction: function (cluster) {
+      const count = cluster.getChildCount();
+      return L.divIcon({
+        className: 'marker-cluster',
+        html: `<div class="cluster-anchor"><div class="cluster-bubble">${count} Ativos </div></div>`,
+        iconSize: null,
+        iconAnchor: [0, 0]
+      });
+    }
+  });
+
+  /* Adiciona todos os pins */
+  projectLocations.forEach(loc => {
+    const marker = L.marker(loc.latlng, { icon: pinIcon });
+    marker.bindPopup(popupHTML(loc), { className: 'site-popup', maxWidth: 340, closeButton: true });
+    markers.addLayer(marker);
+  });
+
+  map.addLayer(markers);
+
+  /* ===== Ajusta zoom inicial para mostrar todos ===== */
+  map.fitBounds(L.latLngBounds(projectLocations.map(l => l.latlng)), { padding: [50, 50] });
+</script>
+</body>
+</html>
